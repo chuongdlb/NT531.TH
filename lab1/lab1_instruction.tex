@@ -1,0 +1,283 @@
+% Compile with: lualatex lab1_instruction.tex
+\documentclass[12pt,a4paper]{article}
+
+% ── Fonts & Vietnamese ──
+\usepackage{fontspec}
+\setmainfont{DejaVuSerif}[
+  Path = /usr/share/fonts/truetype/dejavu/,
+  Extension = .ttf,
+  BoldFont = DejaVuSerif-Bold,
+]
+\setsansfont{DejaVuSans}[
+  Path = /usr/share/fonts/truetype/dejavu/,
+  Extension = .ttf,
+  BoldFont = DejaVuSans-Bold,
+]
+\setmonofont{DejaVuSansMono}[
+  Path = /usr/share/fonts/truetype/dejavu/,
+  Extension = .ttf,
+  BoldFont = DejaVuSansMono-Bold,
+  BoldItalicFont = DejaVuSansMono-BoldOblique,
+  ItalicFont = DejaVuSansMono-Oblique,
+]
+
+% ── Packages ──
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+% ── Colors ──
+\definecolor{codeblue}{HTML}{0060A8}
+\definecolor{codegray}{HTML}{5F6368}
+\definecolor{codebg}{HTML}{F5F5F5}
+\definecolor{accentred}{HTML}{C62828}
+
+% ── Code listing style ──
+\lstset{
+  language=Python,
+  basicstyle=\small\ttfamily,
+  keywordstyle=\color{codeblue}\bfseries,
+  commentstyle=\color{codegray}\itshape,
+  stringstyle=\color{accentred},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{codegray},
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=4,
+  xleftmargin=1em,
+  framexleftmargin=0.5em,
+}
+
+% ── Header/Footer ──
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small NT531 — Đánh giá hiệu năng Mạng máy tính}
+\rhead{\small Lab 1}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Section formatting ──
+\titleformat{\section}{\Large\bfseries\sffamily}{}{0em}{}
+\titleformat{\subsection}{\large\bfseries\sffamily}{}{0em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\sffamily}{}{0em}{}
+
+% ══════════════════════════════════════════════════════════
+\begin{document}
+
+% ── Title ──
+\begin{center}
+  {\LARGE\bfseries\sffamily Lab 1 — Quá trình Poisson và Mô phỏng Hàng đợi M/M/1, M/M/n}\\[0.5em]
+  {\large Môn: NT531 — Đánh giá hiệu năng Mạng máy tính}\\[0.3em]
+  {\normalsize Giảng viên: Chuong Dang --- \texttt{chuongdlb@uit.edu.vn}}\\[0.2em]
+  {\normalsize Học kỳ 2, 2025–2026}
+\end{center}
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+% ══════════════════════════════════════════════════════════
+\section{1. Mục tiêu}
+Sau khi hoàn thành bài lab này, sinh viên sẽ:
+\begin{itemize}[nosep]
+  \item Hiểu quá trình đến (arrival process) Poisson và cách sinh thời gian giữa các lần đến.
+  \item Hiểu ký hiệu Kendall (A/S/n) và ý nghĩa của M/M/1, M/M/n.
+  \item Mô phỏng hàng đợi M/M/1 bằng Python thuần (array-based) và bằng thư viện SimPy.
+  \item So sánh kết quả mô phỏng với công thức lý thuyết (closed-form).
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════
+\section{2. Kiến thức nền tảng}
+
+% ── 2.1 ──
+\subsection{2.1 Phân phối Poisson và thời gian giữa các lần đến}
+
+Nếu số sự kiện (ví dụ: số gói tin đến) trong một khoảng thời gian $T_s$ tuân theo phân phối Poisson với tốc độ (rate) $\lambda$, thì:
+
+\[
+  P(X = k) = \frac{(\lambda T_s)^k}{k!}\, e^{-\lambda T_s}, \qquad k = 0, 1, 2, \ldots
+\]
+
+Thời gian giữa hai lần đến liên tiếp (inter-arrival time) tuân theo phân phối mũ (exponential). Ta có thể sinh mẫu bằng phương pháp \textbf{nghịch đảo hàm phân phối} (inverse transform):
+
+\[
+  t_{\text{inter}} = \frac{-1}{\lambda} \ln(1 - U), \qquad U \sim \text{Uniform}(0,1)
+\]
+
+% ── 2.2 ──
+\subsection{2.2 Ký hiệu Kendall (Kendall's Notation)}
+
+Hệ thống hàng đợi được mô tả bằng ký hiệu \textbf{A/S/n}:
+\begin{itemize}[nosep]
+  \item \textbf{A} — Phân phối thời gian đến (Arrival distribution)
+  \item \textbf{S} — Phân phối thời gian phục vụ (Service distribution)
+  \item \textbf{n} — Số server (bộ phục vụ)
+\end{itemize}
+
+Trong đó \textbf{M} = Markovian (memoryless) = phân phối mũ.
+
+\begin{itemize}[nosep]
+  \item \textbf{M/M/1}: Đến Poisson, phục vụ exponential, 1 server.
+  \item \textbf{M/M/n}: Đến Poisson, phục vụ exponential, $n$ server.
+\end{itemize}
+
+% ── 2.3 ──
+\subsection{2.3 Các công thức M/M/1}
+
+Gọi $\lambda$ là tốc độ đến, $\mu$ là tốc độ phục vụ. Hệ thống ổn định khi $\rho = \lambda/\mu < 1$.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Ký hiệu} & \textbf{Công thức} & \textbf{Ý nghĩa} \\
+  \midrule
+  $\rho$  & $\lambda / \mu$          & Hệ số sử dụng (utilization) \\
+  $L$     & $\rho / (1 - \rho)$      & Số trung bình trong hệ thống \\
+  $L_q$   & $\rho^2 / (1 - \rho)$    & Số trung bình trong hàng đợi \\
+  $W$     & $1 / (\mu - \lambda)$    & Thời gian trung bình trong hệ thống \\
+  $W_q$   & $\rho / (\mu - \lambda)$ & Thời gian chờ trung bình trong hàng đợi \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+% ── 2.4 ──
+\subsection{2.4 Các công thức M/M/n (tham khảo)}
+
+Với hệ thống M/M/n ($n$ server), hệ số sử dụng mỗi server là:
+\[
+  \rho = \frac{\lambda}{n\mu}
+\]
+
+Xác suất một gói tin phải chờ trong hàng đợi được tính bằng \textbf{công thức Erlang-C}:
+\[
+  C(n, a) = \frac{\dfrac{a^n}{n!} \cdot \dfrac{1}{1-\rho}}
+  {\displaystyle\sum_{k=0}^{n-1} \frac{a^k}{k!} + \frac{a^n}{n!} \cdot \frac{1}{1-\rho}},
+  \qquad a = \frac{\lambda}{\mu}
+\]
+
+Từ đó:
+\[
+  W_q = \frac{C(n,a)}{n\mu - \lambda}, \qquad
+  L_q = \lambda \cdot W_q
+\]
+
+\textit{Ghi chú: Sinh viên không cần tự suy dẫn công thức Erlang-C; chỉ cần hiểu ý nghĩa và sử dụng hàm đã cung cấp trong notebook.}
+
+% ══════════════════════════════════════════════════════════
+\section{3. Kịch bản thực hành}
+
+\begin{quote}
+\itshape
+Một bộ định tuyến mạng (network router) có cổng đầu ra xử lý gói tin.
+Gói tin đến theo quá trình Poisson với tốc độ $\lambda = 5$ gói/giây.
+Thời gian xử lý mỗi gói tuân theo phân phối mũ với tốc độ $\mu = 8$ gói/giây.
+Mô phỏng \textbf{10.000 gói tin}.
+\end{quote}
+
+Các tham số:
+\begin{itemize}[nosep]
+  \item $\lambda = 5$ gói/giây (tốc độ đến)
+  \item $\mu = 8$ gói/giây (tốc độ phục vụ)
+  \item $\rho = \lambda/\mu = 0{,}625$ (hệ thống ổn định)
+  \item Số gói mô phỏng: $N = 10.000$
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════
+\section{4. Hướng dẫn thực hành}
+
+Bài lab gồm 3 phần, tương ứng với 3 phần trong notebook \texttt{lab1\_notebook.ipynb}. Tổng cộng có \textbf{20 TODO} sinh viên cần hoàn thành.
+
+% ── Phần 1 ──
+\subsection{Phần 1: Quá trình đến Poisson (TODO 1–7)}
+
+Phần này giữ lại nội dung cốt lõi của bài lab gốc (Excel), nhưng chuyển sang Python.
+
+\begin{enumerate}[nosep]
+  \item \textbf{TODO 1}: Sinh $N=200$ thời gian giữa các lần đến bằng phương pháp inverse transform.
+  \item \textbf{TODO 2}: Tính thời gian đến tích lũy (cumulative arrival times).
+  \item \textbf{TODO 3}: Chia trục thời gian thành các khe (time slot), đếm số gói đến mỗi khe.
+  \item \textbf{TODO 4}: Tính PMF thực nghiệm — tần suất $f(x)$ và \%real.
+  \item \textbf{TODO 5}: Tính PMF lý thuyết Poisson — \%theory.
+  \item \textbf{TODO 6}: Vẽ biểu đồ cột so sánh PMF thực nghiệm vs lý thuyết.
+  \item \textbf{TODO 7}: In trung bình và phương sai của số gói đến mỗi khe. Xác minh: với Poisson, mean $\approx$ variance $\approx \lambda T_s$.
+\end{enumerate}
+
+% ── Phần 2 ──
+\subsection{Phần 2: Mô phỏng hàng đợi M/M/1 bằng Python thuần (TODO 8–16)}
+
+Sinh viên sẽ xây dựng vòng lặp mô phỏng array-based:
+
+\begin{lstlisting}
+arrival_time[i] = arrival_time[i-1] + inter_arrival[i]
+service_start[i] = max(arrival_time[i], departure_time[i-1])
+departure_time[i] = service_start[i] + service_time[i]
+wait_time[i] = service_start[i] - arrival_time[i]
+\end{lstlisting}
+
+\begin{enumerate}[nosep]
+  \item \textbf{TODO 8}: Sinh thời gian giữa các lần đến (exponential, rate $\lambda$).
+  \item \textbf{TODO 9}: Sinh thời gian phục vụ (exponential, rate $\mu$).
+  \item \textbf{TODO 10}: Hoàn thành vòng lặp mô phỏng (event-driven loop).
+  \item \textbf{TODO 11}: Tính các chỉ số mô phỏng: $L$, $L_q$, $W$, $W_q$, $\rho$.
+  \item \textbf{TODO 12}: Tính các chỉ số lý thuyết M/M/1.
+  \item \textbf{TODO 13}: In bảng so sánh mô phỏng vs lý thuyết.
+  \item \textbf{TODO 14}: Vẽ biểu đồ — Số gói trong hàng đợi theo thời gian (step plot).
+  \item \textbf{TODO 15}: Vẽ biểu đồ — Histogram thời gian chờ.
+  \item \textbf{TODO 16}: Vẽ biểu đồ — Hệ số sử dụng server theo thời gian (rolling average).
+\end{enumerate}
+
+% ── Phần 3 ──
+\subsection{Phần 3: Mô phỏng bằng SimPy + M/M/n (TODO 17–20)}
+
+SimPy là thư viện mô phỏng sự kiện rời rạc (discrete-event simulation) cho Python. Sinh viên sử dụng \texttt{simpy.Resource(capacity=n)} để mô phỏng hệ thống với $n$ server.
+
+\begin{enumerate}[nosep]
+  \item \textbf{TODO 17}: Viết mô phỏng M/M/1 bằng SimPy (packet generator + server resource).
+  \item \textbf{TODO 18}: So sánh kết quả SimPy M/M/1 với kết quả Phần 2.
+  \item \textbf{TODO 19}: Mở rộng sang M/M/n — chạy với $n = 1, 2, 3, 4$ và thu thập $W_q$.
+  \item \textbf{TODO 20}: Vẽ biểu đồ — $W_q$ theo số server $n$.
+\end{enumerate}
+
+% ══════════════════════════════════════════════════════════
+\section{5. Yêu cầu nộp bài}
+
+\begin{itemize}[nosep]
+  \item Upload file \texttt{.zip} chứa:
+    \begin{itemize}[nosep]
+      \item Notebook đã hoàn thành (\texttt{.ipynb})
+      \item Báo cáo (\texttt{.docx}) — sử dụng template đã cung cấp
+    \end{itemize}
+  \item Tên file: \texttt{<HoTen>\_<MSSV>\_lab1.zip}
+  \item Ví dụ: \texttt{NguyenVanA\_22520001\_lab1.zip}
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════
+\section{6. Câu hỏi thảo luận}
+
+Sinh viên trả lời các câu hỏi sau trong báo cáo:
+
+\begin{enumerate}
+  \item \textbf{Q1}: Khi $\rho \to 1$, điều gì xảy ra với thời gian chờ $W_q$? Giải thích bằng công thức và bằng kết quả mô phỏng.
+
+  \item \textbf{Q2}: So sánh kết quả mô phỏng M/M/1 giữa Python thuần (Phần 2) và SimPy (Phần 3). Có khác biệt đáng kể không? Giải thích tại sao.
+
+  \item \textbf{Q3}: Với M/M/n, cho $\lambda = 5$ gói/giây và $\mu = 3$ gói/giây, cần bao nhiêu server để $W_q < 0{,}1$ giây? Trả lời bằng cách chạy mô phỏng với các giá trị $n$ khác nhau.
+\end{enumerate}
+
+\vspace{2em}
+\hrule
+\vspace{0.5em}
+\begin{center}
+  \textit{— Hết —}
+\end{center}
+
+\end{document}
